@@ -12,20 +12,21 @@ HEADERS = {
 def create_html(f: str):
     with open(f, "w+") as file:
         page = requests.get(URL, headers=HEADERS)
+        page.encoding = "utf-8"
         file.write(page.text)
 
 
 class BanksParser:
     def __init__(self) -> None:
         self.banks: list = list()
-        self.best_usd_buy: float = None
-        self.best_usd_self: float = None
-        self.best_euro_buy: float = None
-        self.best_euro_sell: float = None
+        self.best_usd_buy: str = ""
+        self.best_usd_sell: str = ""
+        self.best_euro_buy: str = ""
+        self.best_euro_sell: str = ""
 
     def get_data(self, data: str) -> None:
         soup = BeautifulSoup(data, "lxml")
-        data: list = soup.find_all("div", class_="xxx-tbl-row")
+        data: list = soup.find_all("div", class_="xxx-tbl-row__grid")
         for element in data:
             try:
                 name = element.find(
@@ -38,13 +39,14 @@ class BanksParser:
                     class_="xxx-tbl-cell")[2].find_all(class_="xxx-df")[0].find("span").text
                 euro_sell = element.find_all(
                     class_="xxx-tbl-cell")[2].find_all(class_="xxx-df")[1].find("span").text
-                self.banks.append({"name": name, "usd_buy": usd_buy, "usd_sell": usd_sell,
-                                   "euro_buy": euro_buy, "euro_sell": euro_sell})
+                self.banks.append({"name": name.strip(), "usd_buy": float(usd_buy), "usd_sell": float(usd_sell),
+                                   "euro_buy": float(euro_buy), "euro_sell": float(euro_sell), })
 
             except AttributeError:
                 continue
 
-    def save_to_csv(self, f: str):
+    def save_to_csv(self, f: str) -> None:
+        self.get_best_rate()
         with open(f, "w") as file:
             writer = csv.DictWriter(file, fieldnames=['name', 'usd_buy',
                                                       'usd_sell', 'euro_buy', 'euro_sell'])
@@ -52,6 +54,19 @@ class BanksParser:
             for element in self.banks:
                 writer.writerow(element)
 
-    def save_to_json(self, f: str):
+
+    def save_to_json(self, f: str) -> None:
         with open(f, "w") as file:
             json.dump(self.banks, file, ensure_ascii=False)
+
+    def get_best_rate(self) -> None:
+        best_usd_buy = sorted(
+            self.banks, key=lambda x: x["usd_buy"], reverse=True)[0]
+        best_usd_sell = sorted(self.banks, key=lambda x: x["usd_sell"])[0]
+        best_euro_buy = sorted(
+            self.banks, key=lambda x: x["euro_buy"], reverse=True)[0]
+        best_euro_sell = sorted(self.banks, key=lambda x: x["euro_sell"])[0]
+        self.best_usd_buy: str = f"Лучший банк для продажи долларов - {best_usd_buy['name']} с курсом {best_usd_buy['usd_buy']} руб."
+        self.best_usd_sell: str = f"Лучший банк для покупки долларов - {best_usd_sell['name']} с курсом {best_usd_sell['usd_sell']} руб."
+        self.best_euro_buy: str = f"Лучший банк для продажи евро - {best_euro_buy['name']} с курсом {best_euro_buy['euro_buy']} руб."
+        self.best_euro_sell: str = f"Лучший банк для покупки евро - {best_euro_sell['name']} с курсом {best_euro_sell['euro_sell']} руб."
